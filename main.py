@@ -5,8 +5,8 @@ import userinterface
 if __name__ == '__main__':
     args = arguments.get_args()
 
-    ui = userinterface.CVAnnoUI()
+    ui = userinterface.CVAnnoUI(annotation_dir=args.annotation_dir)
 
     while True:
         ui.render()
-        cv.waitKey(100)
+        #cv.waitKey(100)
