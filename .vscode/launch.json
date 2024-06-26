@@ -11,7 +11,7 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "--annotation_dir", "/Users/schulzr/Documents/Datasets/TUC-PersonSegmentation Kopie"
+                "--annotation_dir", "/Users/schulzr/Documents/Datasets/TUC-PersonSegmentation"
             ]
         }
     ]

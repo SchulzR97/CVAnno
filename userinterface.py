@@ -1,8 +1,9 @@
 import cv2 as cv
 import os
 
-BACKGROUND_COLOR = (0.8, 0.8, 0.8)
-FOREGROUND_COLOR = (1., 0.6, 0.6)
+COLOR_LIGHT_GRAY = (0.8, 0.8, 0.8)
+COLOR_DARK_GRAY = (0.4, 0.4, 0.4)
+COLOR_CORNFLOWER_BLUE = (1., 0.6, 0.6)
 FOCUSED_COLOR = (0.4, 0.4, 0.4)
 
 def get_text_size(text:str, fontScale, fontFace = cv.FONT_HERSHEY_SIMPLEX):
@@ -50,7 +51,7 @@ class UIElement():
             img = cv.rectangle(img, (self.px - self.margin_inner, self.py - self.margin_inner), (self.px + self.w + self.margin_inner, self.py + self.h + self.margin_inner), color=FOCUSED_COLOR, thickness=1)
 
         if self.focusable and self.is_mouse_over:
-            img = cv.rectangle(img, (self.px - self.margin_outer, self.py - self.margin_outer), (self.px + self.w + self.margin_outer, self.py + self.h + self.margin_outer), color=FOREGROUND_COLOR, thickness=1)
+            img = cv.rectangle(img, (self.px - self.margin_outer, self.py - self.margin_outer), (self.px + self.w + self.margin_outer, self.py + self.h + self.margin_outer), color=COLOR_CORNFLOWER_BLUE, thickness=1)
 
 class TextBox(UIElement):
     def __init__(self, label, text, px, py, w = 50):
@@ -94,7 +95,7 @@ class TextBox(UIElement):
 
     def draw(self, img):
         super().draw(img)
-        img = cv.rectangle(img, (self.px, self.py), (self.px + self.w, self.py + self.h), color=BACKGROUND_COLOR, thickness=1)
+        img = cv.rectangle(img, (self.px, self.py), (self.px + self.w, self.py + self.h), color=COLOR_LIGHT_GRAY, thickness=1)
         fh, fw = get_text_size(self.text, self.fontScale)
         show_cursor = self.render_cycles < self.cursor_blink_interval and \
                         self.is_focused
@@ -136,33 +137,33 @@ class TextBlock(UIElement):
         return img
 
 class ToggleSwitch(UIElement):
-    def __init__(self, label, px, py):
-        super().__init__(label, px, py, 40, 20)
+    def __init__(self, label, px, py, on_left_button_clicked = None):
+        super().__init__(label, px, py, 40, 20, on_left_button_clicked=on_left_button_clicked)
 
         self.is_checked = False
 
     def mouse_left_button_clicked(self, x, y):
-        super().mouse_left_button_clicked(x, y)
         if x >= self.px and x <= self.px + self.w and \
             y >= self.py and y <= self.py + self.h:
             self.is_checked = not self.is_checked
+        super().mouse_left_button_clicked(x, y)
 
     def draw(self, img):
         super().draw(img)
 
         # background
-        img = cv.rectangle(img, (self.px + self.h // 2, self.py + 4), (self.px + self.w - self.h // 2, self.py + self.h - 4), color=BACKGROUND_COLOR, thickness=-1)
-        img = cv.circle(img, (self.px + self.h // 2, self.py + self.h // 2), radius=self.h // 2 - 3, color=BACKGROUND_COLOR, thickness=-1)
-        img = cv.circle(img, (self.px + self.w - self.h // 2, self.py + self.h // 2), radius=self.h // 2 - 3, color=BACKGROUND_COLOR, thickness=-1)
+        img = cv.rectangle(img, (self.px + self.h // 2, self.py + 4), (self.px + self.w - self.h // 2, self.py + self.h - 4), color=COLOR_LIGHT_GRAY, thickness=-1)
+        img = cv.circle(img, (self.px + self.h // 2, self.py + self.h // 2), radius=self.h // 2 - 3, color=COLOR_LIGHT_GRAY, thickness=-1)
+        img = cv.circle(img, (self.px + self.w - self.h // 2, self.py + self.h // 2), radius=self.h // 2 - 3, color=COLOR_LIGHT_GRAY, thickness=-1)
 
         # foreground
         if self.is_checked:
-            img = cv.circle(img, (self.px + self.w - self.h // 2, self.py + self.h // 2), radius=self.h // 2, color=FOREGROUND_COLOR, thickness=-1)
+            img = cv.circle(img, (self.px + self.w - self.h // 2, self.py + self.h // 2), radius=self.h // 2, color=COLOR_CORNFLOWER_BLUE, thickness=-1)
         else:
-            img = cv.circle(img, (self.px + self.h // 2, self.py + self.h // 2), radius=self.h // 2, color=FOREGROUND_COLOR, thickness=-1)
+            img = cv.circle(img, (self.px + self.h // 2, self.py + self.h // 2), radius=self.h // 2, color=COLOR_DARK_GRAY, thickness=-1)
 
         # text
-        fh, fw = get_text_size(self.text, self.fontScale)
+        fh, fw = get_text_size(self.label, self.fontScale)
         #factor = (fh-1) / self.fontScale
         img = cv.putText(img, self.label, (self.px + self.w + 5, self.py + (self.h - fh) // 2 + fh), cv.FONT_HERSHEY_SIMPLEX, fontScale=self.fontScale, color=(0, 0, 0))
 
@@ -190,9 +191,9 @@ class Button(UIElement):
     def draw(self, img):
         super().draw(img)
 
-        img = cv.rectangle(img, (self.px, self.py), (self.px + self.w, self.py + self.h), BACKGROUND_COLOR, thickness=-1)
+        img = cv.rectangle(img, (self.px, self.py), (self.px + self.w, self.py + self.h), COLOR_LIGHT_GRAY, thickness=-1)
         if self.is_checked:
-            img = cv.rectangle(img, (self.px, self.py), (self.px + self.w, self.py + self.h), BACKGROUND_COLOR, thickness=-1)
+            img = cv.rectangle(img, (self.px, self.py), (self.px + self.w, self.py + self.h), COLOR_LIGHT_GRAY, thickness=-1)
         
         img = cv.putText(img, self.label, (self.px + self.w // 2 - self.fw // 2, self.py + (self.h - self.fh) // 2 + self.fh),\
                          cv.FONT_HERSHEY_SIMPLEX, fontScale=self.fontScale, color=(0, 0, 0))

@@ -98,6 +98,7 @@ class OpenFolderDialog():
         self.enter_pressed = False
         while not self.enter_pressed:
             self.render()
+            cv.waitKey(1)
         cv.destroyWindow(self.window_name)
 
     def render(self):
@@ -167,11 +168,19 @@ class CVAnnoUI(Window):
         self.load_image()
 
     def render(self):
-        img_name = self.annotation_window.image_names[self.annotation_window.selected_image_idx]
+        if len(self.annotation_window.image_names) == 0:
+            img_name = 'No images'
+            self.annotation_window.points = []
+            self.annotation_window.frame = np.zeros((1,1,3))
+        else:
+            img_name = self.annotation_window.image_names[self.annotation_window.selected_image_idx]
         self.txt_selected_image.text = img_name
         self.txt_image_header.text = f'Image ({self.annotation_window.selected_image_idx+1}/{len(self.annotation_window.image_names)})'
 
-        self.txt_selected_point.text = str(self.annotation_window.points[self.annotation_window.p_i])
+        if len(self.annotation_window.points) == 0:
+            self.txt_selected_point.text = 'No points'
+        else:
+            self.txt_selected_point.text = str(self.annotation_window.points[self.annotation_window.p_i])
         self.txt_point_header.text = f'Point ({self.annotation_window.p_i + 1}/{len(self.annotation_window.points)})'
 
         super().render()
@@ -194,6 +203,9 @@ class CVAnnoUI(Window):
                                             px=5+20+5, py=105, w=400, align='center')
         self.btn_next_image = ui.Button('>', px=5 + 20 + 5 + self.txt_selected_image.w + 5, py=105, w = 20,\
                                             on_left_button_clicked=self.btn_next_image_clicked)
+        self.switch_not_annotated_images = ui.ToggleSwitch('Not annotated', px=5+20+5+self.txt_selected_image.w+5+20+5, py=105,\
+                                                           on_left_button_clicked=self.switch_not_annotated_images_clicked)
+        self.switch_not_annotated_images.is_checked = True
 
         # point
         self.txt_point_header = ui.TextBlock(None, 'Point', px=5, py=130, align='left', bold=True)
@@ -216,6 +228,7 @@ class CVAnnoUI(Window):
             self.btn_previous_image,
             self.btn_next_image,
             self.txt_selected_image,
+            self.switch_not_annotated_images,
 
             # point
             self.txt_point_header,
@@ -242,12 +255,17 @@ class CVAnnoUI(Window):
             self.annotation_window.selected_image_idx += 1
         self.load_image()
 
+    def switch_not_annotated_images_clicked(self):
+        self.annotation_window.load_image_names(self.switch_not_annotated_images.is_checked)
+        self.load_image()
+        #self.render()
+
     def btn_previous_point_clicked(self):
         if self.annotation_window.p_i == 0:
             self.annotation_window.p_i = len(self.annotation_window.points) - 1
         else:
             self.annotation_window.p_i -= 1
-        self.txt_selected_point.text = str(self.points[self.annotation_window.p_i])
+        self.txt_selected_point.text = str(self.annotation_window.points[self.annotation_window.p_i])
         self.txt_point_header.text = f'Point ({self.annotation_window.p_i + 1}/{len(self.annotation_window.points)})'
 
     def btn_next_point_clicked(self):
@@ -259,18 +277,18 @@ class CVAnnoUI(Window):
         self.txt_point_header.text = f'Point ({self.annotation_window.p_i + 1}/{len(self.annotation_window.points)})'
 
     def btn_select_directory_clicked(self):
-        ofd = OpenFolderDialog(self.annotation_dir)
-        self.annotation_dir = ofd.path
-        self.txt_annotation_dir.text = self.annotation_dir
-        self.annotation_window.load_image_names()
-        self.selected_image_idx = 0
-        self.txt_selected_image.text = self.annotation_window.image_names[self.selected_image_idx]
+        ofd = OpenFolderDialog(self.annotation_window.annotation_dir)
+        self.annotation_window.annotation_dir = ofd.path
+        self.txt_annotation_dir.text = self.annotation_window.annotation_dir
+        self.annotation_window.load_image_names(self.switch_not_annotated_images.is_checked)
+        self.annotation_window.selected_image_idx = 0
+        #self.txt_selected_image.text = self.annotation_window.image_names[self.annotation_window.selected_image_idx]
         self.load_image()
 
     def btn_open_folder_clicked(self):
         if platform.system() == OS_NAMES['Mac']:
             #subprocess.Popen(["finder", self.annotation_dir])
-            subprocess.call(["open", "-R", f'{self.annotation_dir}'])
+            subprocess.call(["open", "-R", f'{self.annotation_window.annotation_dir}'])
         else:
             raise Exception(f'Open folder is not implemented for {platform.system()}.')
 #endregion
@@ -353,17 +371,29 @@ class AnnotationWindow(Window):
             with open(config_filename, 'w') as f:
                 json.dump(self.config, f)
 
-    def load_image_names(self):
+    def load_image_names(self, load_not_annotated_images:bool = True):
         img_dir = f'{self.annotation_dir}/images'
         self.image_names = []
         for entry in sorted(os.listdir(img_dir)):
             if not entry.lower().endswith('.png') and not entry.lower().endswith('.jpg') and not entry.lower().endswith('.jpeg'):
                 continue
 
+            if not load_not_annotated_images:
+                id = entry.split('.')[-2]
+                label_file = f'{self.annotation_dir}/labels/{id}.json'
+                if os.path.isfile(label_file):
+                    continue
+
             self.image_names.append(entry)
+        pass
 
     def load_image(self):
-        img_name = self.image_names[self.selected_image_idx]
+        if len(self.image_names) == 0:
+            img_name = 'No images'
+            return
+        else:
+            img_name = self.image_names[self.selected_image_idx]
+        
         id = img_name.split('.')[-2]
         label_file = f'{self.annotation_dir}/labels/{id}.json'
         if os.path.isfile(label_file):
@@ -376,10 +406,11 @@ class AnnotationWindow(Window):
                 'polys': [[[self.frame.shape[1]//2, self.frame.shape[0]//2]]]
             }
             max_h, max_w = self.config['max_image_height'], self.config['max_image_width']
+            self.frame = cv.imread(f'{self.annotation_dir}/images/{img_name}')
             if self.frame.shape[0] > max_h:
                 scale = max_h / self.frame.shape[0]
-                frame = cv.resize(frame, (int(scale * frame.shape[1]), int(scale * frame.shape[0])))
-                cv.imwrite(f'{self.annotation_dir}/images/{img_name}', frame)
+                self.frame = cv.resize(self.frame, (int(scale * self.frame.shape[1]), int(scale * self.frame.shape[0])))
+                cv.imwrite(f'{self.annotation_dir}/images/{img_name}', self.frame)
             if self.frame.shape[1] > max_w:
                 scale = max_w / self.frame.shape[1]
                 self.frame = cv.resize(self.frame, (int(scale * self.frame.shape[1]), int(scale * self.frame.shape[0])))
@@ -443,7 +474,7 @@ class AnnotationWindow(Window):
         if self.p_i < len(self.points) - 1:
             self.p_i += 1
         else:
-            self.p_i = len(self.points) - 1
+            self.p_i = 0
 
     def select_previous_point(self):
         if self.p_i > 0:
@@ -458,6 +489,7 @@ class AnnotationWindow(Window):
         filename = f'{self.annotation_dir}/labels/{id}.json'
         with open(filename, 'w') as f:
             json.dump(self.dict, f)
+        self.pending_changes = False
 
     def poly(self, img, points, color):
         overlay = img.copy() 
