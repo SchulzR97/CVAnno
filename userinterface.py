@@ -1,139 +1,14 @@
 import cv2 as cv
-import numpy as np
 import os
-import dialog
-import json
 
 BACKGROUND_COLOR = (0.8, 0.8, 0.8)
 FOREGROUND_COLOR = (1., 0.6, 0.6)
 FOCUSED_COLOR = (0.4, 0.4, 0.4)
 
-def cross(img, p, color, size):
-    s = size // 2
-    p00 = [(p[0] - s), (p[1] - s)]
-    p01 = [(p[0] + s), (p[1] - s)]
-    p10 = [(p[0] - s), (p[1] + s)]
-    p11 = [(p[0] + s), (p[1] + s)]
-    img = cv.line(img, p00, p11, color, thickness=1)
-    img = cv.line(img, p10, p01, color, thickness=1)
-    return img
-
-def get_sub_dirs(dir, level, max_level = 3):
-    sub_dirs = []
-    if level > max_level:
-        return sub_dirs
-    try:
-        for entry in sorted(os.listdir(dir)):
-            if os.path.isdir(f'{dir}/{entry}'):
-                sub_dirs.append(f'{dir}/{entry}')
-                for sub_dir in get_sub_dirs(f'{dir}/{entry}', level + 1, max_level=max_level):
-                    sub_dirs.append(sub_dir)
-    except:
-        pass
-    return sub_dirs
-
-class CVAnnoUI(dialog.Window):
-    def __init__(self, annotation_dir:str = None):
-        super().__init__('CVAnno - Annotation Tool', size = (600, 300))
-        if annotation_dir is None:
-            ofd = dialog.OpenFolderDialog(annotation_dir)
-            self.annotation_dir = ofd.path
-        else:
-            self.annotation_dir = annotation_dir
-
-        self.load_image_names()
-        self.selected_image_idx = 0
-
-        self.txt_annotation_dir = TextBlock(None, self.annotation_dir, px=5, py=30, w=self.size[0] - 100 - 5 - 10)
-        self.txt_image_header = TextBlock(None, 'Image', px=5, py=55, align='left', bold=True)
-        self.txt_selected_image = TextBlock(None, self.image_names[self.selected_image_idx], px=5+20+5, py=80, w=400, align='center')
-        self.ui_elements = [
-            # directory
-            TextBlock(None, 'Directory', px=5, py=5, align='left', bold=True),
-            self.txt_annotation_dir,
-            Button('Select folder...', px=self.size[0] - 100 - 10, py = 30, w = 100,\
-                   on_left_button_clicked=self.btn_select_folder_clicked),
-
-            # image
-            self.txt_image_header,
-            Button('<', px=5, py=80, w = 20,\
-                on_left_button_clicked=self.btn_previous_image_clicked),
-            Button('>', px=5 + 20 + 5 + self.txt_selected_image.w + 5, py=80, w = 20,\
-                on_left_button_clicked=self.btn_next_image_clicked),
-            self.txt_selected_image,
-
-            # point
-            TextBlock(None, 'Point', px=5, py=105, align='left', bold=True),
-            Button('<', px=5, py=130, w = 20,\
-                on_left_button_clicked=self.btn_previous_point_clicked),
-            Button('>', px=5 + 20 + 5 + self.txt_selected_image.w + 5, py=130, w = 20,\
-                on_left_button_clicked=self.btn_next_point_clicked),
-        ]
-        self.load_image()
-
-    def load_image_names(self):
-        img_dir = f'{self.annotation_dir}/images'
-        self.image_names = []
-        for entry in sorted(os.listdir(img_dir)):
-            if not entry.lower().endswith('.png') and not entry.lower().endswith('.jpg') and not entry.lower().endswith('.jpeg'):
-                continue
-
-            self.image_names.append(entry)
-
-    def load_image(self):
-        img_name = self.image_names[self.selected_image_idx]
-        self.txt_selected_image.text = img_name
-        self.txt_image_header.text = f'Image ({self.selected_image_idx+1}/{len(self.image_names)})'
-
-        id = self.image_names[self.selected_image_idx].split('.')[-2]
-        label_file = f'{self.annotation_dir}/labels/{id}.json'
-        if os.path.isfile(label_file):
-            with open(label_file, 'r') as f:
-                self.dict = json.load(f)
-        # label file does not exist
-        else:
-            self.dict = {
-                'image_id': img_name,
-                'polys': [[[frame.shape[1]//2, frame.shape[0]//2]]]
-            }
-            max_h, max_w = 1500, 1500
-            if frame.shape[0] > max_h:
-                scale = max_h / frame.shape[0]
-                frame = cv.resize(frame, (int(scale * frame.shape[1]), int(scale * frame.shape[0])))
-                cv.imwrite(f'{self.annotation_dir}/images/{img_name}', frame)
-            if frame.shape[1] > max_w:
-                scale = max_w / frame.shape[1]
-                frame = cv.resize(frame, (int(scale * frame.shape[1]), int(scale * frame.shape[0])))
-                cv.imwrite(f'{self.annotation_dir}/images/{img_name}', frame)
-        pass
-
-    def load_point(self):
-        pass
-
-    def btn_previous_image_clicked(self):
-        if self.selected_image_idx > 0:
-            self.selected_image_idx -= 1
-            self.load_image()
-
-    def btn_next_image_clicked(self):
-        if self.selected_image_idx < len(self.image_names) - 1:
-            self.selected_image_idx += 1
-            self.load_image()
-
-    def btn_previous_point_clicked(self):
-        pass
-
-    def btn_next_point_clicked(self):
-        pass
-
-    def btn_select_folder_clicked(self):
-        ofd = dialog.OpenFolderDialog(self.annotation_dir)
-        self.annotation_dir = ofd.path
-        self.txt_annotation_dir.text = self.annotation_dir
-        self.load_image_names()
-        self.selected_image_idx = 0
-        self.txt_selected_image.text = self.image_names[self.selected_image_idx]
-        self.load_image()
+def get_text_size(text:str, fontScale, fontFace = cv.FONT_HERSHEY_SIMPLEX):
+    ((fw,fh), baseline) = cv.getTextSize(
+            text, fontFace=fontFace, fontScale=fontScale, thickness=1) # empty string is good enough
+    return fh, fw
 
 class UIElement():
     def __init__(self, label, px, py, w, h, fontScale = 0.4, on_left_button_clicked = None, focusable = True):
@@ -160,8 +35,6 @@ class UIElement():
         else:
             self.is_focused = False
         
-        
-
     def mouse_right_button_clicked(self, x, y):
         pass
 
@@ -171,9 +44,6 @@ class UIElement():
             self.is_mouse_over = True
         else:
             self.is_mouse_over = False
-
-    def key_input(self, key):
-        pass
 
     def draw(self, img):
         if self.focusable and self.is_focused:
@@ -225,8 +95,7 @@ class TextBox(UIElement):
     def draw(self, img):
         super().draw(img)
         img = cv.rectangle(img, (self.px, self.py), (self.px + self.w, self.py + self.h), color=BACKGROUND_COLOR, thickness=1)
-        ((fw,fh), baseline) = cv.getTextSize(
-            self.text, fontFace=cv.FONT_HERSHEY_SIMPLEX, fontScale=self.fontScale, thickness=1) # empty string is good enough
+        fh, fw = get_text_size(self.text, self.fontScale)
         show_cursor = self.render_cycles < self.cursor_blink_interval and \
                         self.is_focused
         out_text = ''
@@ -253,8 +122,7 @@ class TextBlock(UIElement):
 
     def draw(self, img):
         super().draw(img)
-        ((fw,fh), baseline) = cv.getTextSize(
-            self.text, fontFace=cv.FONT_HERSHEY_SIMPLEX, fontScale=self.fontScale, thickness=1) # empty string is good enough
+        fh, fw = get_text_size(self.text, self.fontScale)
 
         thickness = 2 if self.bold else 1
 
@@ -294,8 +162,7 @@ class ToggleSwitch(UIElement):
             img = cv.circle(img, (self.px + self.h // 2, self.py + self.h // 2), radius=self.h // 2, color=FOREGROUND_COLOR, thickness=-1)
 
         # text
-        ((fw,fh), baseline) = cv.getTextSize(
-            "", fontFace=cv.FONT_HERSHEY_SIMPLEX, fontScale=self.fontScale, thickness=1) # empty string is good enough
+        fh, fw = get_text_size(self.text, self.fontScale)
         #factor = (fh-1) / self.fontScale
         img = cv.putText(img, self.label, (self.px + self.w + 5, self.py + (self.h - fh) // 2 + fh), cv.FONT_HERSHEY_SIMPLEX, fontScale=self.fontScale, color=(0, 0, 0))
 
@@ -307,8 +174,7 @@ class Button(UIElement):
                          on_left_button_clicked = on_left_button_clicked)
 
         # text
-        ((fw,fh), baseline) = cv.getTextSize(
-            self.label, fontFace=cv.FONT_HERSHEY_SIMPLEX, fontScale=self.fontScale, thickness=1) # empty string is good enough
+        fh, fw = get_text_size(label, self.fontScale)
         self.fw = fw
         self.fh = fh
         self.w = fw + 5 if w is None else w
@@ -328,7 +194,6 @@ class Button(UIElement):
         if self.is_checked:
             img = cv.rectangle(img, (self.px, self.py), (self.px + self.w, self.py + self.h), BACKGROUND_COLOR, thickness=-1)
         
-        #factor = (fh-1) / self.fontScale
         img = cv.putText(img, self.label, (self.px + self.w // 2 - self.fw // 2, self.py + (self.h - self.fh) // 2 + self.fh),\
                          cv.FONT_HERSHEY_SIMPLEX, fontScale=self.fontScale, color=(0, 0, 0))
         return img

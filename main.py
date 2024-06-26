@@ -1,11 +1,12 @@
 import cv2 as cv
 import arguments
-import userinterface
+import window
+import numpy as np
 
 if __name__ == '__main__':
     args = arguments.get_args()
 
-    ui = userinterface.CVAnnoUI(annotation_dir=args.annotation_dir)
+    ui = window.CVAnnoUI(annotation_dir=args.annotation_dir)
 
     while True:
         ui.render()
