@@ -1,7 +1,6 @@
 import cv2 as cv
 import numpy as np
 import userinterface as ui
-import model
 from pathlib import Path
 import os
 import json
@@ -203,11 +202,10 @@ class TextInputDialog(Window):
             ui_element.key_input(key)
 
 class SegmentationUI(Window):
-    def __init__(self, annotation_dir:str = None, unet:model.UNet = None):
+    def __init__(self, annotation_dir:str = None):
         super().__init__('CVAnno - Segmentation', size = (700, 300))
 
         self.annotation_window = SegmentationWindow(annotation_dir)
-        self.unet = unet
 
         self.create_ui()
         self.load_image()
@@ -270,9 +268,6 @@ class SegmentationUI(Window):
         self.btn_next_point = ui.Button('>', px=5 + 20 + 5 + self.txt_selected_image.w + 5, py=180, w = 20,\
                                         on_left_button_clicked=self.btn_next_point_clicked)
         
-        # function buttons
-        self.btn_ai_mask = ui.Button('AI mask', px=5, py = 230, w=100, on_left_button_clicked=self.btn_ai_mask_clicked)
-
         # quit
         self.btn_quit = ui.Button('Quit', px=self.size[0] - 10 - 50, py=self.size[1] - 10 - 20, w=50, on_left_button_clicked=self.btn_quit_clicked)
 
@@ -298,9 +293,6 @@ class SegmentationUI(Window):
             self.btn_previous_point,
             self.txt_selected_point,
             self.btn_next_point,
-
-            # function buttons
-            self.btn_ai_mask,
 
             # quit
             self.btn_quit
@@ -391,13 +383,9 @@ class SegmentationUI(Window):
         png = np.full((img.shape[0], img.shape[1], 4), 255, dtype=np.uint8)
         png[:, :, 0:3] = img.copy()
         png[:, :, 3] = overlay
-        # cv.imshow('test', img)
-        # cv.imshow('png', png)
-        # cv.imshow('overlay', overlay)
         full_name = self.annotation_window.image_names[self.annotation_window.selected_image_idx]
         fname = full_name.split('.')[-2]
         cv.imwrite(f'{segmented_dir}/{fname}.png', png)
-        #cv.waitKey()
 
     def btn_previous_point_clicked(self):
         if self.annotation_window.p_i == 0:
@@ -430,22 +418,6 @@ class SegmentationUI(Window):
             subprocess.call(["open", "-R", f'{self.annotation_window.annotation_dir}'])
         else:
             raise Exception(f'Open folder is not implemented for {platform.system()}.')
-
-    def btn_ai_mask_clicked(self):
-        if self.unet is None:
-            return
-        frame = copy.copy(self.annotation_window.frame)
-        scale = np.min([500 / frame.shape[0], 500/frame.shape[1]])
-        frame = cv.resize(frame, (int(np.round(scale * frame.shape[1])), int(np.round(scale * frame.shape[0]))))
-        frame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
-        points = model.predict_mask(self.unet, frame)
-        points /= scale
-        points = np.array(points, dtype=np.int32)
-        # for i, p in enumerate(points):
-        #     points[i]
-        self.annotation_window.points = points
-        self.render()
-        pass
 
     def btn_quit_clicked(self):
         self.dispose = True
