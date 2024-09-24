@@ -248,24 +248,26 @@ class SegmentationUI(Window):
         self.btn_previous_image = ui.Button('<', px=5, py=105, w = 20,\
                                             on_left_button_clicked=self.btn_previous_image_clicked)
         self.txt_selected_image = ui.TextBlock(None, self.annotation_window.image_names[self.annotation_window.selected_image_idx],\
-                                            px=5+20+5, py=105, w=500, align='center')
+                                            px=5+20+5, py=105, w=450, align='center')
         self.btn_next_image = ui.Button('>', px=5 + 20 + 5 + self.txt_selected_image.w + 5, py=105, w = 20,\
                                             on_left_button_clicked=self.btn_next_image_clicked)
-        self.switch_not_annotated_images = ui.ToggleSwitch('Not annotated', px=5+20+5+self.txt_selected_image.w+5+20+5, py=105,\
+        self.switch_not_annotated_images = ui.ToggleSwitch('Not annotated', px=5+20+5+self.txt_selected_image.w+5+50+5, py=105,\
                                                            on_left_button_clicked=self.switch_not_annotated_images_clicked)
         self.switch_not_annotated_images.is_checked = True
         self.btn_resize_image = ui.Button('Resize', px=self.size[0] - 150 - 10, py = 130, w = 150,\
                                             on_left_button_clicked=self.btn_resize_image_clicked)
         self.btn_save_segmented_image = ui.Button('Save segmented image', px=self.size[0] - 150 - 10, py = 155, w = 150,\
                                             on_left_button_clicked=self.btn_save_segmented_image_clicked)
+        self.btn_save_mask = ui.Button('Save mask', px=self.size[0] - 150 - 10, py = 180, w = 150,\
+                                            on_left_button_clicked=self.btn_save_mask_clicked)
 
         # point
         self.txt_point_header = ui.TextBlock(None, 'Point', px=5, py=155, align='left', bold=True)
         self.btn_previous_point = ui.Button('<', px=5, py=180, w = 20,\
                                             on_left_button_clicked=self.btn_previous_point_clicked)
         self.txt_selected_point = ui.TextBlock(None, str(self.annotation_window.points[self.annotation_window.p_i]),\
-                                            px=5+20+5, py=180, w=400, align='center')
-        self.btn_next_point = ui.Button('>', px=5 + 20 + 5 + self.txt_selected_image.w + 5, py=180, w = 20,\
+                                            px=5+20+5, py=180, w=450, align='center')
+        self.btn_next_point = ui.Button('>', px=5 + 20 + 5 + self.txt_selected_point.w + 5, py=180, w = 20,\
                                         on_left_button_clicked=self.btn_next_point_clicked)
         
         # quit
@@ -287,6 +289,7 @@ class SegmentationUI(Window):
             self.switch_not_annotated_images,
             self.btn_resize_image,
             self.btn_save_segmented_image,
+            self.btn_save_mask,
 
             # point
             self.txt_point_header,
@@ -386,6 +389,26 @@ class SegmentationUI(Window):
         full_name = self.annotation_window.image_names[self.annotation_window.selected_image_idx]
         fname = full_name.split('.')[-2]
         cv.imwrite(f'{segmented_dir}/{fname}.png', png)
+
+    def btn_save_mask_clicked(self):
+        mask_dir = f'{self.annotation_window.annotation_dir}/mask'
+        if not os.path.isdir(mask_dir):
+            os.mkdir(mask_dir)
+
+        fname = f'{self.annotation_window.annotation_dir}/images/{self.annotation_window.image_names[self.annotation_window.selected_image_idx]}'
+        img = cv.imread(fname)
+        
+        mask = np.zeros((img.shape[0], img.shape[1]))
+        points = np.array(self.annotation_window.points)
+        mask = cv.fillPoly(mask, [points], (255, 255, 255))
+        mask = np.array(mask, dtype=np.uint8)
+
+        # png = np.full((img.shape[0], img.shape[1], 4), 255, dtype=np.uint8)
+        # png[:, :, 0:3] = img.copy()
+        # png[:, :, 3] = mask
+        full_name = self.annotation_window.image_names[self.annotation_window.selected_image_idx]
+        fname = full_name.split('.')[-2]
+        cv.imwrite(f'{mask_dir}/{fname}.jpg', mask)
 
     def btn_previous_point_clicked(self):
         if self.annotation_window.p_i == 0:
@@ -617,6 +640,8 @@ class SegmentationWindow(Window):
         self.dict['polys'] = [self.points]
 
         id = self.image_names[self.selected_image_idx].split('.')[-2]
+        if not os.path.isdir(f'{self.annotation_dir}/labels'):
+            os.mkdir(f'{self.annotation_dir}/labels')
         filename = f'{self.annotation_dir}/labels/{id}.json'
         with open(filename, 'w') as f:
             json.dump(self.dict, f)
