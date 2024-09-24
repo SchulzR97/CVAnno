@@ -11,7 +11,7 @@
             "program": "main.py",
             "console": "integratedTerminal",
             "args": [
-                "--annotation_dir", "/Users/schulzr/Documents/Datasets/TUC-PersonSegmentation-500",
+                //"--annotation_dir", "",
                 "--type", "segmentation"
             ]
         }
