@@ -1,6 +1,7 @@
 import cv2 as cv
 import numpy as np
 import userinterface as ui
+import model
 from pathlib import Path
 import os
 import json
@@ -39,7 +40,7 @@ class Window():
         self.fontScale = 0.4
         self.size = size
         self.img = np.ones((size[1], size[0], 3), dtype=np.float32)
-
+        self.dispose = False
         self.ui_elements = []
 
         cv.imshow(self.win_name, self.img)
@@ -158,11 +159,55 @@ class OpenFolderDialog():
         new_line = cv.putText(new_line, text, (10, self.line_height//2+3), cv.FONT_HERSHEY_SIMPLEX, 0.4, color=(0, 0, 0), thickness=1)
         self.img = np.concatenate([self.img, new_line])
 
-class CVAnnoUI(Window):
-    def __init__(self, annotation_dir:str = None):
-        super().__init__('CVAnno - Annotation Tool', size = (700, 300))
+class TextInputDialog(Window):
+    def __init__(self, win_name, text, check_valid = None):
+        super().__init__(win_name, size=(500, 80))
 
-        self.annotation_window = AnnotationWindow(annotation_dir)
+        self.txt_header = ui.TextBlock(None, self.win_name, px=5, py=5)
+        self.txt_input = ui.TextBox(None, text, px=5, py=30, w=self.size[0]-10, check_valid=check_valid)
+        self.txt_input.is_focused = True
+        self.btn_cancel = ui.Button('Cancel', px=5, py = 55, w = self.size[0]//2-10, on_left_button_clicked=self.on_btn_cancel_clicked)
+        self.btn_save = ui.Button('Save', px=self.size[0]//2+5, py = 55, w = self.size[0]//2-10, on_left_button_clicked=self.on_btn_save_clicked)
+
+        self.ui_elements = [
+            self.txt_header,
+            self.txt_input,
+            self.btn_cancel,
+            self.btn_save
+        ]
+
+        self.confirmed = False
+        
+        while not self.confirmed:
+            self.render()
+            key = cv.waitKey(1)
+            self.key_input(key)
+            if self.txt_input.enter_pressed:
+                self.confirmed = True
+        cv.destroyWindow(self.win_name)
+
+    def on_btn_cancel_clicked(self):
+        cv.destroyWindow(self.win_name)
+
+    def on_btn_save_clicked(self):
+        self.confirmed = True
+        cv.destroyWindow(self.win_name)
+
+    def render(self):
+        super().render()
+
+    def key_input(self, key):
+        if key == -1:
+            return
+        for ui_element in self.ui_elements:
+            ui_element.key_input(key)
+
+class SegmentationUI(Window):
+    def __init__(self, annotation_dir:str = None, unet:model.UNet = None):
+        super().__init__('CVAnno - Segmentation', size = (700, 300))
+
+        self.annotation_window = SegmentationWindow(annotation_dir)
+        self.unet = unet
 
         self.create_ui()
         self.load_image()
@@ -174,7 +219,7 @@ class CVAnnoUI(Window):
             self.annotation_window.frame = np.zeros((1,1,3))
         else:
             img_name = self.annotation_window.image_names[self.annotation_window.selected_image_idx]
-        self.txt_selected_image.text = img_name
+        self.txt_selected_image.text = f'{img_name} ({self.annotation_window.frame.shape[1]}, {self.annotation_window.frame.shape[0]})'
         self.txt_image_header.text = f'Image ({self.annotation_window.selected_image_idx+1}/{len(self.annotation_window.image_names)})'
 
         if len(self.annotation_window.points) == 0:
@@ -182,6 +227,9 @@ class CVAnnoUI(Window):
         else:
             self.txt_selected_point.text = str(self.annotation_window.points[self.annotation_window.p_i])
         self.txt_point_header.text = f'Point ({self.annotation_window.p_i + 1}/{len(self.annotation_window.points)})'
+
+        max_h, max_w = self.annotation_window.config['max_image_height'], self.annotation_window.config['max_image_width']
+        self.btn_resize_image.is_enabled = self.annotation_window.frame.shape[0] > max_h or self.annotation_window.frame.shape[1] > max_w
 
         super().render()
         self.annotation_window.render()
@@ -197,24 +245,36 @@ class CVAnnoUI(Window):
 
         # image
         self.txt_image_header = ui.TextBlock(None, 'Image', px=5, py=80, align='left', bold=True)
+        self.btn_rename = ui.Button('Rename', px=self.size[0] - 150 - 10, py = 80, w = 150,\
+                                            on_left_button_clicked=self.btn_rename_clicked)
         self.btn_previous_image = ui.Button('<', px=5, py=105, w = 20,\
                                             on_left_button_clicked=self.btn_previous_image_clicked)
         self.txt_selected_image = ui.TextBlock(None, self.annotation_window.image_names[self.annotation_window.selected_image_idx],\
-                                            px=5+20+5, py=105, w=400, align='center')
+                                            px=5+20+5, py=105, w=500, align='center')
         self.btn_next_image = ui.Button('>', px=5 + 20 + 5 + self.txt_selected_image.w + 5, py=105, w = 20,\
                                             on_left_button_clicked=self.btn_next_image_clicked)
         self.switch_not_annotated_images = ui.ToggleSwitch('Not annotated', px=5+20+5+self.txt_selected_image.w+5+20+5, py=105,\
                                                            on_left_button_clicked=self.switch_not_annotated_images_clicked)
         self.switch_not_annotated_images.is_checked = True
+        self.btn_resize_image = ui.Button('Resize', px=self.size[0] - 150 - 10, py = 130, w = 150,\
+                                            on_left_button_clicked=self.btn_resize_image_clicked)
+        self.btn_save_segmented_image = ui.Button('Save segmented image', px=self.size[0] - 150 - 10, py = 155, w = 150,\
+                                            on_left_button_clicked=self.btn_save_segmented_image_clicked)
 
         # point
-        self.txt_point_header = ui.TextBlock(None, 'Point', px=5, py=130, align='left', bold=True)
-        self.btn_previous_point = ui.Button('<', px=5, py=155, w = 20,\
+        self.txt_point_header = ui.TextBlock(None, 'Point', px=5, py=155, align='left', bold=True)
+        self.btn_previous_point = ui.Button('<', px=5, py=180, w = 20,\
                                             on_left_button_clicked=self.btn_previous_point_clicked)
         self.txt_selected_point = ui.TextBlock(None, str(self.annotation_window.points[self.annotation_window.p_i]),\
-                                            px=5+20+5, py=155, w=400, align='center')
-        self.btn_next_point = ui.Button('>', px=5 + 20 + 5 + self.txt_selected_image.w + 5, py=155, w = 20,\
+                                            px=5+20+5, py=180, w=400, align='center')
+        self.btn_next_point = ui.Button('>', px=5 + 20 + 5 + self.txt_selected_image.w + 5, py=180, w = 20,\
                                         on_left_button_clicked=self.btn_next_point_clicked)
+        
+        # function buttons
+        self.btn_ai_mask = ui.Button('AI mask', px=5, py = 230, w=100, on_left_button_clicked=self.btn_ai_mask_clicked)
+
+        # quit
+        self.btn_quit = ui.Button('Quit', px=self.size[0] - 10 - 50, py=self.size[1] - 10 - 20, w=50, on_left_button_clicked=self.btn_quit_clicked)
 
         self.ui_elements = [
             # directory
@@ -225,40 +285,119 @@ class CVAnnoUI(Window):
 
             # image
             self.txt_image_header,
+            self.btn_rename,
             self.btn_previous_image,
             self.btn_next_image,
             self.txt_selected_image,
             self.switch_not_annotated_images,
+            self.btn_resize_image,
+            self.btn_save_segmented_image,
 
             # point
             self.txt_point_header,
             self.btn_previous_point,
             self.txt_selected_point,
             self.btn_next_point,
+
+            # function buttons
+            self.btn_ai_mask,
+
+            # quit
+            self.btn_quit
         ]
 
     def load_image(self):
         self.annotation_window.load_image()
 
 #region UI interaction
+    def btn_rename_clicked(self):
+        def check_valid(text):
+            for img_name in self.annotation_window.image_names:
+                if img_name.split('.')[-2] == text:
+                    return False
+            if len(text) == 0:
+                return False
+            return True
+
+        img_name = self.annotation_window.image_names[self.annotation_window.selected_image_idx]
+        appendix = img_name.split('.')[-1]
+        id = img_name.split('.')[-2]
+        txt_input = TextInputDialog('Rename annotation', id, check_valid=check_valid)
+
+        if txt_input.confirmed:
+            new_id = f'{txt_input.txt_input.text}'
+            self.annotation_window.image_names[self.annotation_window.selected_image_idx] = f'{new_id}.{appendix}'
+            #self.txt_selected_image.text = f'{txt_input.text}.{appendix}'
+            #self.render()
+            os.rename(f'{self.annotation_window.annotation_dir}/images/{id}.{appendix}', f'{self.annotation_window.annotation_dir}/images/{new_id}.{appendix}')
+            os.rename(f'{self.annotation_window.annotation_dir}/labels/{id}.json', f'{self.annotation_window.annotation_dir}/labels/{new_id}.json')
+
+        pass
+
     def btn_previous_image_clicked(self):
-        if self.annotation_window.selected_image_idx == 0:
-            self.annotation_window.selected_image_idx = len(self.annotation_window.image_names) - 1
-        else:
-            self.annotation_window.selected_image_idx -= 1
+        self.annotation_window.select_previous_image()
+        # if self.annotation_window.selected_image_idx == 0:
+        #     self.annotation_window.selected_image_idx = len(self.annotation_window.image_names) - 1
+        # else:
+        #     self.annotation_window.selected_image_idx -= 1
         self.load_image()
 
     def btn_next_image_clicked(self):
-        if self.annotation_window.selected_image_idx == len(self.annotation_window.image_names) - 1:
-            self.annotation_window.selected_image_idx = 0
-        else:
-            self.annotation_window.selected_image_idx += 1
+        self.annotation_window.select_next_image()
+        # if self.annotation_window.selected_image_idx == len(self.annotation_window.image_names) - 1:
+        #     self.annotation_window.selected_image_idx = 0
+        # else:
+        #     self.annotation_window.selected_image_idx += 1
         self.load_image()
 
     def switch_not_annotated_images_clicked(self):
         self.annotation_window.load_image_names(self.switch_not_annotated_images.is_checked)
         self.load_image()
         #self.render()
+
+    def btn_resize_image_clicked(self):
+        max_h, max_w = self.annotation_window.config['max_image_height'], self.annotation_window.config['max_image_width']
+        scale = np.min([max_h / self.annotation_window.frame.shape[0], max_w / self.annotation_window.frame.shape[1]])
+        frame = cv.resize(self.annotation_window.frame, (int(np.round(scale * self.annotation_window.frame.shape[1])), int(np.round(scale * self.annotation_window.frame.shape[0]))))
+        points = copy.copy(self.annotation_window.points)
+
+        if scale == 1:
+            return
+
+        for i, p in enumerate(self.annotation_window.points):
+            self.annotation_window.points[i][0] = int(np.round(scale * p[0]))
+            self.annotation_window.points[i][1] = int(np.round(scale * p[1]))
+            pass
+        
+        fname = f'{self.annotation_window.annotation_dir}/images/{self.annotation_window.image_names[self.annotation_window.selected_image_idx]}'
+        if cv.imwrite(fname, frame):
+            self.annotation_window.points = points
+            self.annotation_window.frame = frame
+            self.annotation_window.pending_changes = True
+        pass
+
+    def btn_save_segmented_image_clicked(self):
+        segmented_dir = f'{self.annotation_window.annotation_dir}/segmented'
+        if not os.path.isdir(segmented_dir):
+            os.mkdir(segmented_dir)
+
+        fname = f'{self.annotation_window.annotation_dir}/images/{self.annotation_window.image_names[self.annotation_window.selected_image_idx]}'
+        img = cv.imread(fname)
+        
+        overlay = np.zeros((img.shape[0], img.shape[1]))
+        points = np.array(self.annotation_window.points)
+        overlay = cv.fillPoly(overlay, [points], (255, 255, 255))
+
+        png = np.full((img.shape[0], img.shape[1], 4), 255, dtype=np.uint8)
+        png[:, :, 0:3] = img.copy()
+        png[:, :, 3] = overlay
+        # cv.imshow('test', img)
+        # cv.imshow('png', png)
+        # cv.imshow('overlay', overlay)
+        full_name = self.annotation_window.image_names[self.annotation_window.selected_image_idx]
+        fname = full_name.split('.')[-2]
+        cv.imwrite(f'{segmented_dir}/{fname}.png', png)
+        #cv.waitKey()
 
     def btn_previous_point_clicked(self):
         if self.annotation_window.p_i == 0:
@@ -282,7 +421,7 @@ class CVAnnoUI(Window):
         self.txt_annotation_dir.text = self.annotation_window.annotation_dir
         self.annotation_window.load_image_names(self.switch_not_annotated_images.is_checked)
         self.annotation_window.selected_image_idx = 0
-        #self.txt_selected_image.text = self.annotation_window.image_names[self.annotation_window.selected_image_idx]
+        self.annotation_window.load_config()
         self.load_image()
 
     def btn_open_folder_clicked(self):
@@ -291,11 +430,30 @@ class CVAnnoUI(Window):
             subprocess.call(["open", "-R", f'{self.annotation_window.annotation_dir}'])
         else:
             raise Exception(f'Open folder is not implemented for {platform.system()}.')
+
+    def btn_ai_mask_clicked(self):
+        if self.unet is None:
+            return
+        frame = copy.copy(self.annotation_window.frame)
+        scale = np.min([500 / frame.shape[0], 500/frame.shape[1]])
+        frame = cv.resize(frame, (int(np.round(scale * frame.shape[1])), int(np.round(scale * frame.shape[0]))))
+        frame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+        points = model.predict_mask(self.unet, frame)
+        points /= scale
+        points = np.array(points, dtype=np.int32)
+        # for i, p in enumerate(points):
+        #     points[i]
+        self.annotation_window.points = points
+        self.render()
+        pass
+
+    def btn_quit_clicked(self):
+        self.dispose = True
 #endregion
 
-class AnnotationWindow(Window):
+class SegmentationWindow(Window):
     def __init__(self, annotation_dir:str):
-        super().__init__('CVAnno - Annotation Window')
+        super().__init__('CVAnno - Segmentation Window')
 
         if annotation_dir is None:
             ofd = OpenFolderDialog(annotation_dir)
@@ -385,6 +543,7 @@ class AnnotationWindow(Window):
                     continue
 
             self.image_names.append(entry)
+        self.selected_image_idx = 0
         pass
 
     def load_image(self):
@@ -468,7 +627,7 @@ class AnnotationWindow(Window):
 
     def remove_point(self):
         if len(self.points) > 1:
-            self.points.remove(self.points[self.p_i])
+            self.points.pop(self.p_i)
 
     def select_next_point(self):
         if self.p_i < len(self.points) - 1:

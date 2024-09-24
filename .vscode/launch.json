@@ -5,13 +5,14 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python Debugger: Current File with Arguments",
+            "name": "CVAnno - Segmentation",
             "type": "debugpy",
             "request": "launch",
-            "program": "${file}",
+            "program": "main.py",
             "console": "integratedTerminal",
             "args": [
-                "--annotation_dir", "/Users/schulzr/Documents/Datasets/TUC-PersonSegmentation"
+                "--annotation_dir", "/Users/schulzr/Documents/Datasets/TUC-PersonSegmentation-500",
+                "--type", "segmentation"
             ]
         }
     ]

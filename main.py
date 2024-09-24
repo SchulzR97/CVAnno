@@ -1,13 +1,14 @@
 import cv2 as cv
 import arguments
 import window
-import numpy as np
+import model
 
 if __name__ == '__main__':
     args = arguments.get_args()
 
-    ui = window.CVAnnoUI(annotation_dir=args.annotation_dir)
+    unet = model.load_unet('/Users/schulzr/Documents/GIT/depthmap-action-prediction/runs/segmentation_20240705115549/model.pt', grayscale=True)
+    ui = window.SegmentationUI(annotation_dir=args.annotation_dir, unet=unet)
 
-    while True:
+    while not ui.dispose:
         ui.render()
         #cv.waitKey(100)
