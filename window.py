@@ -498,7 +498,7 @@ class SegmentationWindow(Window):
                 'max_image_width': 1500,
                 'max_image_height': 1500
             }
-            with open(config_filename, 'w') as f:
+            with open(config_filename, 'w+') as f:
                 json.dump(self.config, f)
 
     def load_image_names(self, load_not_annotated_images:bool = True):
